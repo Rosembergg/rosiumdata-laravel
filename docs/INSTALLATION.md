@@ -1,0 +1,220 @@
+# INSTALLATION.md — rosiumdata/laravel
+
+> Step-by-step setup guide. From zero to a working table in 5 minutes.
+
+---
+
+## Prerequisites
+
+- **PHP 8.1+**
+- **Laravel 10 or 11**
+- **npm** (for `@rosiumdata/vanilla` Web Component)
+- A database with Eloquent models
+
+---
+
+## Step 1: Install the packages
+
+```bash
+composer require rosiumdata/laravel
+npm install rosiumdata
+```
+
+`composer` installs the PHP package (table classes, auto-generated controller, artisan commands).
+`npm` installs the JavaScript Web Component that renders the table in the browser.
+
+---
+
+## Step 2: Register the Web Component
+
+In `resources/js/app.js`, add:
+
+```js
+import '@rosiumdata/vanilla'
+import '@rosiumdata/vanilla/theme/default.css'
+```
+
+This registers the `<rosium-table>` custom element globally. Once registered, ANY Blade view can use it.
+
+---
+
+## Step 3: Publish the config (optional)
+
+```bash
+php artisan vendor:publish --tag=rosiumdata-config
+```
+
+This creates `config/rosiumdata.php` where you can customize:
+- Where table classes are stored
+- Where JS files are generated
+- URL prefix for the API
+- Middleware for the auto-generated routes
+
+The defaults work for most projects. Only publish if you need to customize.
+
+---
+
+## Step 4: Create your first table
+
+```bash
+php artisan make:rosium-table Produtos --model=Produto
+```
+
+This command:
+1. Creates `app/RosiumTables/ProdutosTable.php`
+2. Creates `resources/js/rosium/produtos.js` (auto-generated — never edit manually)
+3. Reads your `produtos` table schema and pre-fills column types
+
+### Generated file example
+
+```php
+<?php
+
+namespace App\RosiumTables;
+
+use Rosiumdata\Laravel\RosiumTable;
+use Rosiumdata\Laravel\Column;
+use Illuminate\Database\Eloquent\Builder;
+
+class ProdutosTable extends RosiumTable
+{
+    public static function name(): string
+    {
+        return 'produtos';
+    }
+
+    public function query(): Builder
+    {
+        return Produto::query();
+    }
+
+    public function columns(): array
+    {
+        return [
+            Column::make('id', 'number')->label('ID'),
+            Column::make('nome', 'text')->label('Nome'),
+            Column::make('preco', 'number')->label('Preco'),
+            Column::make('criado_em', 'date')->label('Criado Em'),
+        ];
+    }
+}
+```
+
+---
+
+## Step 5: Customize the class
+
+Open `app/RosiumTables/ProdutosTable.php` and customize:
+
+```php
+public function columns(): array
+{
+    return [
+        Column::make('id', 'number')->label('ID'),
+        Column::make('nome', 'text')->label('Produto')->sortable(),
+        Column::make('preco', 'number')
+            ->label('Preço')
+            ->mask('R$ #,##0.00'),
+        Column::make('estoque', 'number')->label('Estoque'),
+        Column::make('status', 'select')
+            ->label('Status')
+            ->options([1 => 'Ativo', 2 => 'Inativo', 3 => 'Pendente']),
+        Column::make('criado_em', 'date')->label('Data'),
+        ActionColumn::make('acoes', [
+            ['key' => 'editar', 'label' => 'Editar'],
+            ['key' => 'excluir', 'label' => 'Excluir', 'danger' => true],
+        ]),
+    ];
+}
+```
+
+**If you added/changed columns, regenerate the JS:**
+
+```bash
+php artisan rosium:generate-js
+```
+
+---
+
+## Step 6: Use in Blade
+
+```blade
+{{-- resources/views/produtos/index.blade.php --}}
+@extends('layouts.app')
+
+@section('content')
+  <h1>Produtos</h1>
+  <rosium-table rosium="produtos" page-size="25" />
+@endsection
+```
+
+Make sure your layout includes Vite:
+
+```blade
+@vite(['resources/css/app.css', 'resources/js/app.js'])
+```
+
+---
+
+## Step 7: Open in the browser
+
+Visit `http://your-app.test/produtos`.
+
+You should see a fully functional table with:
+- Filters (input per column type)
+- Sorting (click header)
+- Pagination (Previous/Next)
+- Action buttons (if defined)
+
+---
+
+## Middleware & Authentication
+
+### Sanctum (SPA)
+
+If your API routes use `auth:sanctum`, update `config/rosiumdata.php`:
+
+```php
+'middleware' => ['api', 'auth:sanctum'],
+```
+
+The auto-generated JS already includes the CSRF token from your meta tag.
+
+### Cookie-based (web)
+
+```php
+'middleware' => ['web', 'auth'],
+```
+
+The table uses `fetch()` with credentials. If the user is logged in via session, it works automatically.
+
+---
+
+## Updating the package
+
+```bash
+composer update rosiumdata/laravel
+npm update rosiumdata
+php artisan rosium:generate-js   # regenerate JS with any new features
+```
+
+---
+
+## Uninstalling
+
+```bash
+composer remove rosiumdata/laravel
+npm uninstall rosiumdata
+```
+
+Remove the `import '@rosiumdata/vanilla'` line from `resources/js/app.js`.
+Delete `resources/js/rosium/` and `resources/js/rosium-init.js`.
+Remove `app/RosiumTables/`.
+
+---
+
+## Next steps
+
+- [USAGE.md](USAGE.md) — complete API reference
+- [RosiumData Core docs](https://github.com/Rosembergg/RSdata) — the underlying engine
+- [RosiumData npm](https://www.npmjs.com/package/rosiumdata) — JavaScript packages

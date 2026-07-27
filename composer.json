@@ -1,0 +1,50 @@
+{
+  "name": "rosiumdata/laravel",
+  "description": "RosiumData Laravel integration — one class, one Blade tag",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Rafael Melo Rosemberg",
+      "email": "rrosembergg.45@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^8.1",
+    "illuminate/support": "^10.0|^11.0|^12.0",
+    "illuminate/http": "^10.0|^11.0|^12.0",
+    "illuminate/database": "^10.0|^11.0|^12.0",
+    "illuminate/routing": "^10.0|^11.0|^12.0",
+    "illuminate/console": "^10.0|^11.0|^12.0",
+    "illuminate/filesystem": "^10.0|^11.0|^12.0"
+  },
+  "require-dev": {
+    "orchestra/testbench": "^8.0|^9.0"
+  },
+  "suggest": {
+    "rosiumdata": "Install rosiumdata npm package for the Web Component and Core engine",
+    "doctrine/dbal": "^3.0 — Required for automatic column type detection in artisan make:rosium-table"
+  },
+  "autoload": {
+    "psr-4": {
+      "Rosiumdata\\Laravel\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Rosiumdata\\Laravel\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Rosiumdata\\Laravel\\RosiumdataServiceProvider"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "phpunit"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}

@@ -1,0 +1,28 @@
+<?php
+
+namespace {{ namespace }};
+
+use Rosiumdata\Laravel\Column;
+use Rosiumdata\Laravel\ActionColumn;
+use Rosiumdata\Laravel\RosiumTable;
+use Illuminate\Database\Eloquent\Builder;
+
+class {{ className }} extends RosiumTable
+{
+    public static function name(): string
+    {
+        return '{{ tableName }}';
+    }
+
+    public function query(): Builder
+    {
+        return {{ model }}::query();
+    }
+
+    public function columns(): array
+    {
+        return [
+{{ columns }}
+        ];
+    }
+}
