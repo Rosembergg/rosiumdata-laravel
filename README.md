@@ -84,6 +84,7 @@ Register the Web Component in `resources/js/app.js`:
 ```js
 import '@rosiumdata/vanilla'
 import '@rosiumdata/vanilla/theme/default.css'
+import './rosium-init'
 ```
 
 ---
