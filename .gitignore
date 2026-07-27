@@ -1,3 +1,11 @@
 /vendor/
 /composer.lock
 .phpunit.result.cache
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+*.log
+.cover
+.ai
+.ia
