@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/php-^8.1-blue" alt="PHP">
-  <img src="https://img.shields.io/badge/laravel-^10.0|^11.0-red" alt="Laravel">
+  <img src="https://img.shields.io/badge/laravel-^10.0|^11.0|^12.0-red" alt="Laravel">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
@@ -19,8 +19,17 @@ A Laravel package that eliminates all the boilerplate of using RosiumData in Bla
 
 ```php
 // app/RosiumTables/ProdutosTable.php
+use Rosiumdata\Laravel\RosiumTable;
+use Rosiumdata\Laravel\Column;
+use Illuminate\Database\Eloquent\Builder;
+
 class ProdutosTable extends RosiumTable
 {
+    public static function name(): string
+    {
+        return 'produtos';
+    }
+
     public function query(): Builder
     {
         return Produto::query();
@@ -82,9 +91,7 @@ Add to your Blade layout:
 Register the Web Component in `resources/js/app.js`:
 
 ```js
-import '@rosiumdata/vanilla'
-import '@rosiumdata/vanilla/theme/default.css'
-import './rosium-init'
+import './rosium-init.js'
 ```
 
 ---
@@ -220,7 +227,7 @@ The Web Component uses the same CSS variables (`--rosium-*`) and classes (`.rosi
 Actions are **triggers, never executors.** The Web Component emits a `detail` event with `{ key, row }` — you decide what to do:
 
 ```js
-document.getElementById('rosium-table-produtos')
+document.querySelector('rosium-table[rosium="produtos"]')
   .addEventListener('action', (event) => {
     const { key, row } = event.detail
     if (key === 'editar') {
@@ -290,7 +297,6 @@ MIT
 
 ## Related
 
-- [RosiumData Core](https://github.com/Rosembergg/RSdata) — the headless engine
 - [RosiumData npm](https://www.npmjs.com/package/rosiumdata) — JavaScript packages
 
 ---

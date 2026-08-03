@@ -8,8 +8,8 @@
 
 This package is part of the RosiumData ecosystem. Before diving in, understand:
 
-1. **[RosiumData Core](https://github.com/Rosembergg/RSdata)** — the JavaScript engine that powers the table
-2. **[USAGE.md](USAGE.md)** — this package's API reference
+1. **[RosiumData Core](https://www.npmjs.com/package/rosiumdata)** — the JavaScript engine that powers the table
+2. **[USAGE.md](docs/USAGE.md)** — this package's API reference
 
 ---
 
@@ -31,7 +31,8 @@ src/
 ├── Column.php                       # Fluent column helper
 ├── ActionColumn.php                 # Action button column
 ├── Console/
-│   └── MakeTableCommand.php         # artisan make:rosium-table
+│   ├── MakeTableCommand.php         # artisan make:rosium-table
+│   └── GenerateJsCommand.php        # artisan rosium:generate-js
 ├── Http/
 │   └── RosiumTableController.php    # Generic controller (handles ALL tables)
 ├── RosiumdataServiceProvider.php    # ServiceProvider

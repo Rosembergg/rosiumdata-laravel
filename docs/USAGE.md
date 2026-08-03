@@ -1,295 +1,529 @@
 # USAGE.md — rosiumdata/laravel
 
-> Complete API reference for the Laravel integration package.
+> API de referência completa do pacote Laravel. Toda classe, todo método, toda opção.
 
 ---
 
-## INDEX
+## ÍNDICE
 
-1. [RosiumTable base class](#1-rosiumtable-base-class)
-2. [Column helper](#2-column-helper)
-3. [ActionColumn](#3-actioncolumn)
-4. [Events and Actions](#4-events-and-actions)
-5. [Configuration](#5-configuration)
-6. [Auto-generated API](#6-auto-generated-api)
-7. [Artisan commands](#7-artisan-commands)
-8. [Advanced queries](#8-advanced-queries)
-9. [Troubleshooting](#9-troubleshooting)
+1. [Conceito geral](#1-conceito-geral)
+2. [RosiumTable (classe base)](#2-rosiumtable-classe-base)
+3. [Column (coluna de dados)](#3-column-coluna-de-dados)
+4. [ActionColumn (botões de ação)](#4-actioncolumn-botões-de-ação)
+5. [Eventos e manipuladores JS](#5-eventos-e-manipuladores-js)
+6. [API auto-gerada (rotas e query params)](#6-api-auto-gerada-rotas-e-query-params)
+7. [Operadores de filtro](#7-operadores-de-filtro)
+8. [Tratamento de erros](#8-tratamento-de-erros)
+9. [Configuração](#9-configuração)
+10. [Artisan commands](#10-artisan-commands)
+11. [Consultas avançadas](#11-consultas-avançadas)
+12. [Detecção de schema](#12-detecção-de-schema)
+13. [Arquivos JS gerados](#13-arquivos-js-gerados)
+14. [Troubleshooting](#14-troubleshooting)
 
 ---
 
-## 1. ROSIUMTABLE BASE CLASS
+## 1. CONCEITO GERAL
 
-All table classes extend `Rosiumdata\Laravel\RosiumTable`.
+Este pacote elimina todo o boilerplate de usar o Web Component `<rosium-table>` no Laravel Blade.
 
-### Required methods
+**Sem o pacote:** você escreve um controller (50+ linhas), uma rota manual, um arquivo JS com `column()` + `LaravelAdapter`, um import no `app.js`, e um tag Blade.
 
-```php
-abstract class RosiumTable
-{
-    /** Unique identifier. Used in Blade tag and route. */
-    abstract public static function name(): string;
-
-    /** Eloquent query builder. Supports select, join, where, subqueries. */
-    abstract public function query(): Builder;
-
-    /** Column definitions. Array of Column or ActionColumn. */
-    abstract public function columns(): array;
-}
-```
-
-### Optional methods
+**Com o pacote:** uma classe PHP + um tag Blade. O pacote gera o controller, a rota, e o JavaScript automaticamente.
 
 ```php
-/** Items per page. Default: 20 */
-public function defaultPageSize(): int
-{
-    return 20;
-}
-
-/** Locale for number/date formatting. Default: 'pt-BR' */
-public function locale(): string
-{
-    return 'pt-BR';
-}
-
-/** localStorage persistence key. null = disabled */
-public function persistenceKey(): ?string
-{
-    return null;  // Set to 'produtos' to enable persistence
-}
-```
-
-### Complete example
-
-```php
-<?php
-
-namespace App\RosiumTables;
-
-use Rosiumdata\Laravel\RosiumTable;
-use Rosiumdata\Laravel\Column;
-use Rosiumdata\Laravel\ActionColumn;
-use Illuminate\Database\Eloquent\Builder;
-use App\Models\Produto;
-
+// app/RosiumTables/ProdutosTable.php
 class ProdutosTable extends RosiumTable
 {
-    public static function name(): string
-    {
-        return 'produtos';
-    }
-
-    public function query(): Builder
-    {
-        return Produto::query();
-    }
-
-    public function columns(): array
-    {
-        return [
-            Column::make('id', 'number')->label('ID'),
-            Column::make('nome', 'text')->label('Produto')->sortable(),
-            Column::make('preco', 'number')
-                ->label('Preço')
-                ->mask('R$ #,##0.00'),
-            Column::make('status', 'select')
-                ->label('Status')
-                ->options([1 => 'Ativo', 2 => 'Inativo', 3 => 'Pendente']),
-            Column::make('criado_em', 'date')->label('Data'),
-            ActionColumn::make('acoes', [
-                ['key' => 'editar', 'label' => 'Editar'],
-                ['key' => 'excluir', 'label' => 'Excluir', 'danger' => true],
-            ]),
-        ];
-    }
-
-    public function defaultPageSize(): int
-    {
-        return 25;
-    }
-
-    public function persistenceKey(): string
-    {
-        return 'produtos';
-    }
+    public static function name(): string { return 'produtos'; }
+    public function query(): Builder { return Produto::query(); }
+    public function columns(): array { /* ... */ }
 }
 ```
 
+```blade
+<rosium-table rosium="produtos" page-size="25" />
+```
+
+**O que você NUNCA escreve:**
+- Controller (o pacote tem um genérico que atende todas as tabelas)
+- Rota (registrada automaticamente em `/rosium-data/{table}`)
+- Arquivo JS (gerado automaticamente de `columns()`)
+- `import { LaravelAdapter } from '@rosiumdata/core'` no app.js
+
 ---
 
-## 2. COLUMN HELPER
+## 2. ROSIUMTABLE CLASSE BASE
 
-Fluent API for defining columns.
+```php
+namespace Rosiumdata\Laravel;
 
-### `Column::make(string $key, string $type)`
+use Illuminate\Database\Eloquent\Builder;
 
-Creates a new column. `$type` must be one of: `text`, `number`, `date`, `datetime`, `boolean`, `select`, `action`.
+abstract class RosiumTable
+{
+    // ===== OBRIGATÓRIOS =====
 
-### Available methods
+    /** Identificador único. Usado na rota e no atributo rosium="" do Blade. */
+    abstract public static function name(): string;
 
-| Method | Description | Example |
-|---|---|---|
-| `->label(string $label)` | Header text (default: ucfirst of key) | `->label('Preço')` |
-| `->mask(string $mask)` | Display mask for number/date columns | `->mask('R$ #,##0.00')` |
-| `->sortable(bool $sortable = true)` | Allow sorting (default: true) | `->sortable(false)` |
-| `->filterable(bool $filterable = true)` | Show filter input (default: true) | `->filterable(false)` |
-| `->visible(bool $visible = true)` | Column visible by default | `->visible(false)` |
-| `->options(array $options)` | Options for select columns | `->options([1 => 'Ativo', 2 => 'Inativo'])` |
-| `->alignment(string $alignment)` | Cell alignment | `->alignment('right')` |
+    /** Eloquent query builder. Suporta select, join, where, subqueries. */
+    abstract public function query(): Builder;
 
-### Chaining example
+    /** Array de Column ou ActionColumn. */
+    abstract public function columns(): array;
+
+    // ===== OPCIONAIS (já têm default) =====
+
+    /** Itens por página. Default: 20 */
+    public function defaultPageSize(): int;
+
+    /** Limite máximo de itens por página. Default: 1000 */
+    public function maxPageSize(): int;
+
+    /** Locale para formatação de número/data. Default: 'pt-BR' */
+    public function locale(): string;
+
+    /** Chave de persistência no localStorage. null = desabilitado. Default: null */
+    public function persistenceKey(): ?string;
+
+    /** JavaScript inline para event listeners. Default: null */
+    public function eventHandlers(): ?string;
+
+    /** Resolve key de coluna → nome qualificado da coluna no banco. Default: retorna a própria key */
+    public function qualifyColumn(string $key): string;
+}
+```
+
+### 2.1 name()
+
+O nome da tabela. Deve ser um identificador JavaScript válido: letras, números e underscore. **Sem hífens, sem acentos, sem espaços.**
+
+```php
+public static function name(): string
+{
+    return 'produtos';           // ✅
+    // return 'meus-produtos';   // ❌ hífen não é válido em identificador JS
+    // return 'meus_produtos';   // ✅ underline é válido
+}
+```
+
+Este nome aparece em 3 lugares:
+- No atributo Blade: `<rosium-table rosium="produtos" />`
+- Na rota da API: `GET /rosium-data/produtos`
+- No arquivo JS gerado: `resources/js/rosium/produtos.js`
+
+### 2.2 query()
+
+Retorna um **Eloquent Builder**. Tudo que o Eloquent suporta funciona aqui: `select()`, `join()`, `leftJoin()`, `where()`, subqueries com `DB::raw()`.
+
+```php
+public function query(): Builder
+{
+    return Produto::query()
+        ->select(['produtos.*', 'categorias.nome as categoria_nome'])
+        ->leftJoin('categorias', 'categorias.id', '=', 'produtos.categoria_id')
+        ->where('produtos.ativo', true);
+}
+```
+
+O controller chama `query()` e aplica filtro, ordenação e paginação em cima. O `where('ativo', true)` é um **pré-filtro** — o usuário nunca vê produtos inativos, independente dos filtros aplicados.
+
+### 2.3 columns()
+
+Array de `Column::make()` e/ou `ActionColumn::make()`. A ordem no array é a ordem das colunas na tabela.
+
+```php
+public function columns(): array
+{
+    return [
+        Column::make('id', 'number')->label('ID'),
+        Column::make('nome', 'text')->label('Produto')->sortable(),
+        Column::make('preco', 'number')->label('Preço')->mask('R$ #,##0.00'),
+        ActionColumn::make('acoes', [
+            ['key' => 'editar', 'label' => 'Editar'],
+            ['key' => 'excluir', 'label' => 'Excluir', 'danger' => true],
+        ]),
+    ];
+}
+```
+
+### 2.4 defaultPageSize()
+
+Controla quantos itens por página por padrão. O usuário pode mudar via atributo `page-size` no Blade.
+
+```php
+public function defaultPageSize(): int
+{
+    return 25;  // 25 itens por página em vez de 20
+}
+```
+
+### 2.5 maxPageSize()
+
+Limite máximo de itens por página. Protege o servidor de `?per_page=999999`.
+
+```php
+public function maxPageSize(): int
+{
+    return 500;  // nunca mais que 500 itens por request
+}
+```
+
+### 2.6 locale()
+
+Locale usado pelo Web Component para formatar números e datas.
+
+```php
+public function locale(): string
+{
+    return 'en-US';  // $1,000.00 | 12/25/2024
+    // return 'pt-BR';  // R$ 1.000,00 | 25/12/2024 (default)
+}
+```
+
+### 2.7 persistenceKey()
+
+Se definida, o Web Component salva estado no `localStorage`: filtros, ordenação, página atual. Ao recarregar a página, o estado é restaurado.
+
+```php
+public function persistenceKey(): string
+{
+    return 'produtos';  // salva em localStorage['produtos']
+}
+```
+
+Retorne `null` para desabilitar (default).
+
+### 2.8 eventHandlers()
+
+JavaScript **inline** injetado após a configuração da tabela. A variável `el` é o elemento `<rosium-table>`. Útil para actions, refresh programático, etc.
+
+```php
+public function eventHandlers(): ?string
+{
+    return "el.addEventListener('action', ({ detail: { key, row } }) => {
+        if (key === 'editar') window.location.href = '/produtos/' + row.raw.id + '/editar'
+        if (key === 'excluir' && confirm('Excluir?')) {
+            fetch('/api/produtos/' + row.raw.id, { method: 'DELETE' })
+                .then(() => el.refresh?.())
+        }
+    })";
+}
+```
+
+**Cuidado:** é JavaScript inline. Use apenas para lógica simples. Para lógica complexa, prefira o arquivo JS externo.
+
+### 2.9 qualifyColumn()
+
+Quando sua query usa JOINs ou aliases, o nome da coluna no `columns()` pode não ser o nome real na tabela. Com `qualifyColumn()`, você mapeia o nome de exibição → nome qualificado no banco para filtros e ordenação.
+
+```php
+// Query com JOIN
+public function query(): Builder
+{
+    return UserResponsavel::query()
+        ->select(['users_responsavel.*', 'users.name as nome'])
+        ->leftJoin('users', 'users.id', '=', 'users_responsavel.user_id');
+}
+
+// Colunas usam os aliases
+public function columns(): array
+{
+    return [
+        Column::make('id', 'number')->label('ID'),
+        Column::make('nome', 'text')->label('Nome'),  // alias do JOIN
+    ];
+}
+
+// qualifyColumn resolve para o nome real na tabela
+public function qualifyColumn(string $key): string
+{
+    return match ($key) {
+        'id'    => 'users_responsavel.id',
+        'nome'  => 'users.name',
+        default => $key,
+    };
+}
+```
+
+Sem `qualifyColumn()`, o controller faria `WHERE nome LIKE '%coca%'` e o SQL retornaria erro de coluna ambígua. Com `qualifyColumn()`, ele faz `WHERE users.name LIKE '%coca%'`.
+
+---
+
+## 3. COLUMN (COLUNA DE DADOS)
+
+### 3.1 Column::make()
+
+```php
+public static function make(string $key, string $type): self
+```
+
+| Parâmetro | Descrição |
+|---|---|
+| `$key` | Nome da coluna no banco (ou alias da query). Ex: `'preco'`, `'categoria_nome'` |
+| `$type` | Tipo da coluna. Um de: `text`, `number`, `date`, `datetime`, `boolean`, `select` |
+
+**Defaults por tipo:**
+
+| Tipo | `sortable` | `filterable` | `label` |
+|---|---|---|---|
+| `text` | `true` | `true` | ucfirst da key |
+| `number` | `true` | `true` | ucfirst da key |
+| `date` | `true` | `true` | ucfirst da key |
+| `datetime` | `true` | `true` | ucfirst da key |
+| `boolean` | `true` | `true` | ucfirst da key |
+| `select` | `true` | `true` | ucfirst da key |
+
+### 3.2 Métodos fluentes
+
+Todos retornam `$this` para encadeamento:
+
+| Método | Assinatura | Default | Descrição |
+|---|---|---|---|
+| `label()` | `(string $label)` | key da coluna | Texto do cabeçalho |
+| `mask()` | `(string $mask)` | `null` | Máscara de exibição (number/date) |
+| `sortable()` | `(bool $sortable = true)` | `true` | Permite ordenar por esta coluna |
+| `filterable()` | `(bool $filterable = true)` | `true` | Mostra input de filtro para esta coluna |
+| `visible()` | `(bool $visible = true)` | `true` | Coluna visível por padrão |
+| `options()` | `(array $options)` | `null` | Opções do select `[value => label]` |
+| `alignment()` | `(string $alignment)` | `null` | Alinhamento: `'left'`, `'center'`, `'right'` |
+
+### 3.3 Exemplos por tipo
+
+#### text
+
+```php
+Column::make('nome', 'text')
+    ->label('Produto')
+    ->sortable()
+    ->filterable()        // input de texto: contém, começa com, termina com, igual
+```
+
+#### number
 
 ```php
 Column::make('preco', 'number')
-    ->label('Preço Unitário')
+    ->label('Preço')
     ->mask('R$ #,##0.00')
-    ->sortable()
-    ->filterable()
     ->alignment('right')
+    // filter: =, >, <, >=, <=, between (min + max)
 ```
+
+A máscara `#` representa um dígito. `0` representa um dígito obrigatório (zero à esquerda). `,` é separador decimal no locale pt-BR.
+
+#### date / datetime
+
+```php
+Column::make('criado_em', 'date')
+    ->label('Data de Criação')
+    ->mask('DD/MM/YYYY')
+    // filter: between (start + end), before, after, equals
+
+Column::make('atualizado_em', 'datetime')
+    ->label('Última Atualização')
+    // filter: between, before, after, equals
+```
+
+#### boolean
+
+```php
+Column::make('ativo', 'boolean')
+    ->label('Ativo')
+    // filter: select Sim/Não
+```
+
+#### select
+
+```php
+Column::make('status', 'select')
+    ->label('Status')
+    ->options([
+        1 => 'Ativo',
+        2 => 'Inativo',
+        3 => 'Pendente',
+    ])
+    // filter: dropdown com as opções acima
+```
+
+**Importante:** as opções são exibidas como labels no Web Component, mas o valor enviado nos filtros é a key do array (1, 2, 3). Certifique-se de que a coluna no banco contém esses valores.
+
+#### Desabilitando sort/filter
+
+```php
+// Coluna calculada não pode ser ordenada
+Column::make('total_vendas', 'number')
+    ->label('Total de Vendas')
+    ->sortable(false)        // sem clique no cabeçalho
+    ->filterable(false)      // sem input de filtro
+```
+
+#### Coluna oculta por padrão
+
+```php
+Column::make('id', 'number')
+    ->label('ID')
+    ->visible(false)         // escondida, mas dados ainda chegam na API
+```
+
+O usuário pode reexibir via menu de colunas no Web Component.
 
 ---
 
-## 3. ACTIONCOLUMN
+## 4. ACTIONCOLUMN (BOTÕES DE AÇÃO)
 
-Defines a column of action buttons.
+### 4.1 ActionColumn::make()
 
-### `ActionColumn::make(string $key, array $actions)`
+```php
+public static function make(string $key, array $actions): self
+```
 
-`$actions` is an array of action definitions:
+| Parâmetro | Descrição |
+|---|---|
+| `$key` | Identificador único da coluna de ações. Ex: `'acoes'`, `'actions'` |
+| `$actions` | Array de definições de ação. Cada ação é um array `['key' => ..., 'label' => ..., 'danger' => ...]` |
+
+### 4.2 Definição de ação
 
 ```php
 [
-    ['key' => 'editar', 'label' => 'Editar'],
-    ['key' => 'excluir', 'label' => 'Excluir', 'danger' => true],
+    'key'    => 'editar',         // string — identificador enviado no evento
+    'label'  => 'Editar',         // string — texto do botão
+    'danger' => false,            // bool (opcional) — estilo visual de ação destrutiva (vermelho)
 ]
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `key` | string | Action identifier (sent in the event) |
-| `label` | string | Button text |
-| `danger` | bool? | Visual danger styling (red) — optional |
-
-### Label
+### 4.3 label()
 
 ```php
-// Default label — 'Actions'
-ActionColumn::make('acoes', [...])
-
-// Custom label
-ActionColumn::make('acoes', [...])->label('Opções')
+ActionColumn::make('acoes', [...])->label('Opções')  // cabeçalho customizado
+// Default: 'Actions'
 ```
 
-### Visual behavior
-- **1 action:** single button rendered directly on the row
-- **2+ actions:** ⋯ icon that opens a dropdown with all options
-- **`danger: true`:** red text in the dropdown
+### 4.4 Comportamento visual
+
+| Nº de ações | Comportamento |
+|---|---|
+| **1 ação** | Botão único renderizado diretamente na linha |
+| **2+ ações** | Ícone ⋯ (três pontos) que abre dropdown com todas as opções |
+| **danger: true** | Texto vermelho no dropdown |
+
+### 4.5 Exemplo completo
+
+```php
+use Rosiumdata\Laravel\ActionColumn;
+
+ActionColumn::make('acoes', [
+    ['key' => 'visualizar', 'label' => 'Visualizar'],
+    ['key' => 'editar',     'label' => 'Editar'],
+    ['key' => 'excluir',    'label' => 'Excluir', 'danger' => true],
+])->label('Ações')
+```
 
 ---
 
-## 4. EVENTS AND ACTIONS
+## 5. EVENTOS E MANIPULADORES JS
 
-Actions are **triggers, never executors.** The Web Component emits a JavaScript `CustomEvent` with the action data. The package does NOT implement destroy/create/update — that's your responsibility.
+### 5.1 O evento `action`
 
-### Capturing action clicks
+Quando o usuário clica num botão de ação, o Web Component dispara um `CustomEvent` do tipo `action`.
 
-```js
-// In a script file loaded on the page
-document.querySelector('rosium-table[rosium="produtos"]')
-  .addEventListener('action', (event) => {
-    const { key, row } = event.detail
-    // row.raw = raw database values
-    // row.display = formatted display values
+**Forma 1 — eventHandlers() na classe PHP (inline):**
 
-    if (key === 'editar') {
-      window.location.href = `/produtos/${row.raw.id}/editar`
-    }
-
-    if (key === 'excluir' && confirm('Excluir?')) {
-      fetch(`/api/produtos/${row.raw.id}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-          'Accept': 'application/json',
-        }
-      }).then(() => {
-        // Refresh the table data
-        document.getElementById('rosium-table-produtos').refresh()
-      })
-    }
-  })
-```
-
-### Event payload (`event.detail`)
-
-```json
+```php
+public function eventHandlers(): ?string
 {
-  "key": "editar",
-  "row": {
-    "raw": { "id": 1, "nome": "Coca-Cola", "preco": 5.99 },
-    "display": { "id": "1", "nome": "Coca-Cola", "preco": "R$ 5,99" }
-  }
+    return "el.addEventListener('action', ({ detail: { key, row } }) => {
+        if (key === 'editar') {
+            window.location.href = '/produtos/' + row.raw.id + '/editar'
+        }
+        if (key === 'excluir' && confirm('Excluir?')) {
+            fetch('/api/produtos/' + row.raw.id, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name=\"csrf-token\"]').content,
+                    'Accept': 'application/json',
+                }
+            }).then(() => el.refresh?.())
+        }
+    })";
 }
 ```
 
+**Forma 2 — JavaScript externo (script separado):**
+
+```js
+document.querySelector('rosium-table[rosium="produtos"]')
+    .addEventListener('action', (event) => {
+        const { key, row } = event.detail
+
+        if (key === 'editar') {
+            window.location.href = `/produtos/${row.raw.id}/editar`
+        }
+
+        if (key === 'excluir' && confirm('Excluir?')) {
+            fetch(`/api/produtos/${row.raw.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Accept': 'application/json',
+                }
+            }).then(() => {
+                document.querySelector('rosium-table[rosium="produtos"]').refresh()
+            })
+        }
+    })
+```
+
+### 5.2 Payload do evento `event.detail`
+
+```json
+{
+    "key": "editar",
+    "row": {
+        "raw": { "id": 1, "nome": "Coca-Cola", "preco": 5.99, "status": 1 },
+        "display": { "id": "1", "nome": "Coca-Cola", "preco": "R$ 5,99", "status": "Ativo" }
+    }
+}
+```
+
+| Campo | Descrição |
+|---|---|
+| `key` | A chave da ação clicada |
+| `row.raw` | Dados brutos do banco (valores originais) |
+| `row.display` | Dados formatados (máscaras aplicadas, opções de select resolvidas) |
+
+### 5.3 Método refresh()
+
+O elemento `<rosium-table>` expõe um método `.refresh()` que recarrega os dados da API.
+
+```js
+// Após excluir um item, recarrega a tabela
+el.refresh?.()
+```
+
+**Actions são gatilhos, nunca executores.** O pacote renderiza o botão e emite o evento. O que acontece depois (editar, excluir, redirecionar) é 100% responsabilidade sua.
+
 ---
 
-## 5. CONFIGURATION
+## 6. API AUTO-GERADA (ROTAS E QUERY PARAMS)
 
-Publish the config:
+### 6.1 Rota
 
-```bash
-php artisan vendor:publish --tag=rosiumdata-config
-```
-
-### `config/rosiumdata.php`
-
-```php
-return [
-
-    // Directory where table classes are stored
-    'path' => app_path('RosiumTables'),
-
-    // Directory where auto-generated JS files are written
-    'js_path' => resource_path('js/rosium'),
-
-    // URL prefix for the auto-generated API routes
-    'route_prefix' => 'rosium-data',
-
-    // Middleware applied to the auto-generated routes
-    'middleware' => ['api'],
-
-];
-```
-
-### Route middleware
-
-The default `['api']` middleware applies API rate limiting and Sanctum auth if configured. Change to `['web', 'auth']` for cookie-based auth:
-
-```php
-'middleware' => ['web', 'auth'],
-```
-
----
-
-## 6. AUTO-GENERATED API
-
-Every registered table gets a `GET` endpoint automatically.
-
-### Route format
+Toda tabela registrada ganha automaticamente uma rota `GET`:
 
 ```
-GET /{prefix}/{table}
+GET /{route_prefix}/{table_name}
 ```
 
-With default config:
+Com o prefixo padrão:
+
 ```
 GET /rosium-data/produtos
+GET /rosium-data/clientes
 ```
 
-### Query parameters the table sends automatically
+### 6.2 Query params que o Web Component envia
 
 ```
 GET /rosium-data/produtos?page=1&per_page=20
@@ -301,122 +535,283 @@ GET /rosium-data/produtos?filter[preco][between]=10,100&page=1&per_page=20
 GET /rosium-data/produtos?filter[nome][like]=coca&filter[preco][gt]=50&sort=nome&page=2&per_page=25
 ```
 
-### Response format
+| Parâmetro | Descrição | Exemplo |
+|---|---|---|
+| `page` | Número da página (1-based) | `page=2` |
+| `per_page` | Itens por página (até `maxPageSize()`) | `per_page=25` |
+| `sort` | Ordenação: `coluna` = asc, `-coluna` = desc | `sort=-preco` |
+| `filter[coluna][operador]` | Filtro por coluna + operador | `filter[nome][like]=coca` |
+
+### 6.3 Resposta da API
 
 ```json
 {
-  "data": [
-    { "id": 1, "nome": "Coca-Cola", "preco": 5.99, "status": 1 },
-    { "id": 2, "nome": "Pepsi", "preco": 4.99, "status": 2 }
-  ],
-  "meta": {
-    "current_page": 1,
-    "total": 100,
-    "per_page": 20
-  }
+    "data": [
+        { "id": 1, "nome": "Coca-Cola", "preco": 5.99, "status": 1 },
+        { "id": 2, "nome": "Pepsi", "preco": 4.99, "status": 2 }
+    ],
+    "meta": {
+        "current_page": 1,
+        "per_page": 20,
+        "total": 100
+    }
 }
 ```
 
-### Filter operators
-
-| Operator | SQL | Example query param | Example value |
-|---|---|---|---|
-| `eq` | `WHERE col = ?` | `filter[status][eq]` | `1` |
-| `like` | `WHERE col LIKE '%?%'` | `filter[nome][like]` | `coca` |
-| `gt` | `WHERE col > ?` | `filter[preco][gt]` | `50` |
-| `gte` | `WHERE col >= ?` | `filter[preco][gte]` | `50` |
-| `lt` | `WHERE col < ?` | `filter[preco][lt]` | `100` |
-| `lte` | `WHERE col <= ?` | `filter[preco][lte]` | `100` |
-| `between` | `WHERE col BETWEEN ? AND ?` | `filter[preco][between]` | `10,100` |
-
-### Error safety
-
-- **Invalid column names** (not in `columns()`) are silently ignored
-- **Invalid operator** is silently ignored
-- **Partial `between`** (only min or only max) uses `>=` or `<=` instead of failing
-- **SQL exceptions** return 500 with error message instead of crashing
-- **Missing table** returns 404
+Este é o formato que o `LaravelAdapter` (do `@rosiumdata/core`) espera. O controller usa `$query->paginate()` do Eloquent, que já retorna exatamente esta estrutura.
 
 ---
 
-## 7. ARTISAN COMMANDS
+## 7. OPERADORES DE FILTRO
 
-### `make:rosium-table`
+### 7.1 Todos os operadores suportados
 
-```bash
-php artisan make:rosium-table Produtos --model=Produto
+| Operador | SQL equivalente | Exemplo de query param | Uso típico |
+|---|---|---|---|
+| `eq` | `WHERE col = ?` | `filter[status][eq]=1` | Igualdade exata |
+| `like` | `WHERE col LIKE '%?%'` | `filter[nome][like]=coca` | Busca textual (contém) |
+| `starts_with` | `WHERE col LIKE '?%'` | `filter[nome][starts_with]=coca` | Começa com |
+| `ends_with` | `WHERE col LIKE '%?'` | `filter[nome][ends_with]=cola` | Termina com |
+| `gt` | `WHERE col > ?` | `filter[preco][gt]=50` | Maior que |
+| `gte` | `WHERE col >= ?` | `filter[preco][gte]=50` | Maior ou igual |
+| `lt` | `WHERE col < ?` | `filter[preco][lt]=100` | Menor que |
+| `lte` | `WHERE col <= ?` | `filter[preco][lte]=100` | Menor ou igual |
+| `before` | `WHERE col < ?` | `filter[data][before]=2024-12-31` | Antes de (datas) |
+| `after` | `WHERE col > ?` | `filter[data][after]=2024-01-01` | Depois de (datas) |
+| `between` | `WHERE col BETWEEN ? AND ?` | `filter[preco][between]=10,100` | Intervalo (string "min,max" ou array [min, max]) |
+
+### 7.2 Operadores recomendados por tipo de coluna
+
+| Tipo de coluna | Operadores naturais |
+|---|---|
+| `text` | `like`, `starts_with`, `ends_with`, `eq` |
+| `number` | `eq`, `gt`, `gte`, `lt`, `lte`, `between` |
+| `date` / `datetime` | `between`, `before`, `after`, `eq` |
+| `boolean` | `eq` |
+| `select` | `eq` |
+
+### 7.3 Detalhes do `between`
+
+O valor pode ser enviado como string `"min,max"` ou array `[min, max]`:
+
+```
+?filter[preco][between]=10,100
+// ou
+?filter[preco][between][]=10&filter[preco][between][]=100
 ```
 
-**What it does:**
+- Se apenas `min` for enviado → `WHERE col >= min`
+- Se apenas `max` for enviado → `WHERE col <= max`
+- Se ambos → `WHERE col BETWEEN min AND max`
 
-1. Creates `app/RosiumTables/ProdutosTable.php` from a stub
-2. Creates `resources/js/rosium/produtos.js` (auto-generated JS — never edit manually)
-3. If `--model=Produto` is provided:
-   - Reads the `produtos` table schema from the database
-   - Auto-detects column types:
-     - `id` → `number`
-     - `varchar`/`text`/`string` → `text`
-     - `decimal`/`float`/`double`/`integer` → `number`
-     - `timestamp`/`datetime` → `date`
-     - `boolean` → `boolean`
-     - Columns ending with `_id` → `select`
-   - Skips: `created_at`, `updated_at`, `deleted_at`, `password`, `remember_token`
-4. Registers the table in the ServiceProvider
-5. Generates the JS file for the browser
+---
 
-**Arguments:**
+## 8. TRATAMENTO DE ERROS
 
-| Argument | Description |
-|---|---|
-| `name` | Table name (StudlyCase, e.g. `Produtos`) |
+O controller genérico tem tratamento de erro em 3 níveis:
 
-**Options:**
+### 8.1 Segurança de filtro
 
-| Option | Description |
-|---|---|
-| `--model=` | Eloquent model to read schema from (e.g. `Produto`) |
+- **Coluna não existe em `columns()`:** filtro é ignorado silenciosamente
+- **Operador inválido:** filtro é ignorado silenciosamente
+- **Coluna com `filterable: false`:** filtro é rejeitado
+- **Coluna com `sortable: false`:** ordenação é rejeitada
+- **Valor vazio (`''`, `null`, `[]`):** filtro é ignorado
 
-### `rosium:generate-js`
+### 8.2 Erros SQL
+
+- `QueryException` → HTTP 500 com `{"error": "Database query error."}`
+- `RuntimeException` (tabela não encontrada) → HTTP 404 com `{"error": "Table [x] not found..."}`
+- Qualquer outro `Throwable` → HTTP 500 com `{"error": "Internal server error."}`
+
+### 8.3 Proteção de página/per_page
+
+```php
+// per_page sempre entre 1 e maxPageSize()
+$perPage = max(1, min($request->per_page, $instance->maxPageSize()));
+
+// page sempre >= 1
+$page = max(1, $request->page);
+```
+
+---
+
+## 9. CONFIGURAÇÃO
+
+Publique o arquivo de configuração:
+
+```bash
+php artisan vendor:publish --tag=rosiumdata-config
+```
+
+### 9.1 Todas as chaves (`config/rosiumdata.php`)
+
+```php
+return [
+
+    // Diretório onde as classes de tabela são armazenadas
+    // O ServiceProvider auto-descobre classes aqui (recursivo)
+    'path' => app_path('RosiumTables'),
+
+    // Diretório onde os arquivos JS auto-gerados são escritos
+    'js_path' => resource_path('js/rosium'),
+
+    // Caminho do arquivo rosium-init.js (importa e inicializa todas as tabelas)
+    'init_path' => resource_path('js/rosium-init.js'),
+
+    // Prefixo da URL para as rotas da API
+    'route_prefix' => 'rosium-data',
+
+    // Middleware aplicado às rotas da API
+    'middleware' => ['api'],
+
+    // Auto-gerar JS em desenvolvimento (padrão: true em local, false em produção)
+    'auto_generate_js' => env('APP_ENV') === 'local',
+
+];
+```
+
+### 9.2 Middleware por caso de uso
+
+```php
+// API pública (sem auth)
+'middleware' => ['api'],
+
+// SPA com Sanctum
+'middleware' => ['api', 'auth:sanctum'],
+
+// Cookie/session (web)
+'middleware' => ['web', 'auth'],
+
+// Sanitize
+'middleware' => ['web', 'auth:sanctum'],
+```
+
+### 9.3 `auto_generate_js`
+
+Quando `true` (default em ambiente `local`), o ServiceProvider gera/atualiza os arquivos JS automaticamente a cada request (com throttle de 5 segundos). Em produção, desligue e use o comando manual:
 
 ```bash
 php artisan rosium:generate-js
 ```
 
-Regenerates ALL JavaScript files from ALL registered table classes. Run this after:
-- Adding a new column to an existing table class
-- Changing a column type, label, or mask
-- Deploying to production (first time)
+---
 
-**This is only needed when table definitions change.** The JS is generated once and cached — it doesn't change at runtime.
+## 10. ARTISAN COMMANDS
+
+### 10.1 make:rosium-table
+
+```bash
+php artisan make:rosium-table Produtos --model=Produto
+```
+
+**Argumentos:**
+
+| Argumento | Descrição |
+|---|---|
+| `name` | Nome da tabela em StudlyCase. Ex: `Produtos`, `ClientesAtivos` |
+
+**Opções:**
+
+| Opção | Descrição |
+|---|---|
+| `--model=` | Model Eloquent para introspecção. Ex: `Produto` ou `App\Models\Produto` |
+| `--path=` | Caminho customizado para a classe. Default: `app/RosiumTables/` |
+
+**O que o comando faz:**
+
+1. Cria `app/RosiumTables/{Name}Table.php` a partir do stub
+2. Cria `resources/js/rosium/{name}.js` (auto-gerado — **nunca edite manualmente**)
+3. Cria/atualiza `resources/js/rosium-init.js` (importa e inicializa todas as tabelas)
+4. Se `--model=` for fornecido:
+   - Lê o schema da tabela do banco via `Schema::getColumnListing()`
+   - Detecta tipos automaticamente (ver seção 12)
+   - Pré-preenche `Column::make()` com os tipos corretos
+5. Registra a classe no ServiceProvider
+6. Gera os arquivos JS
+
+**Exemplos:**
+
+```bash
+# Tabela simples sem modelo
+php artisan make:rosium-table Produtos
+
+# Com introspecção de schema
+php artisan make:rosium-table Produtos --model=Produto
+
+# Com FQCN do modelo
+php artisan make:rosium-table Produtos --model=App\\Models\\Produto
+
+# Em subdiretório customizado
+php artisan make:rosium-table Admin/Produtos --model=Produto --path=app/RosiumTables/Admin
+```
+
+### 10.2 rosium:generate-js
+
+```bash
+php artisan rosium:generate-js
+```
+
+Regenera **todos** os arquivos JavaScript de **todas** as tabelas registradas. Execute após:
+
+- Adicionar/remover colunas de uma tabela
+- Mudar tipo, label, máscara, ou opções de uma coluna
+- Adicionar/remover ações em ActionColumn
+- Alterar `defaultPageSize()`, `locale()`, `persistenceKey()`, `eventHandlers()`
+- Fazer deploy (primeira vez em produção)
+
+**O comando gera:**
+
+1. `resources/js/rosium/{name}.js` — um arquivo por tabela
+2. `resources/js/rosium-init.js` — arquivo único que importa e inicializa todas as tabelas
+
+**Se nenhuma tabela for encontrada:**
+```
+WARN  No RosiumData tables found. Create one with: php artisan make:rosium-table
+```
 
 ---
 
-## 8. ADVANCED QUERIES
+## 11. CONSULTAS AVANÇADAS
 
-### JOIN with another table
+### 11.1 JOIN com outra tabela
 
 ```php
+use Illuminate\Database\Eloquent\Builder;
+
 public function query(): Builder
 {
     return Produto::query()
         ->select(['produtos.*', 'categorias.nome as categoria_nome'])
         ->leftJoin('categorias', 'categorias.id', '=', 'produtos.categoria_id');
 }
-```
 
-```php
 public function columns(): array
 {
     return [
-        // ...
-        Column::make('categoria_nome', 'text')->label('Categoria'),
+        Column::make('id', 'number')->label('ID'),
+        Column::make('nome', 'text')->label('Produto'),
+        Column::make('categoria_nome', 'text')->label('Categoria')->sortable(),
     ];
+}
+
+// Necessário para evitar "column ambiguo" nos filtros
+public function qualifyColumn(string $key): string
+{
+    return match ($key) {
+        'id'              => 'produtos.id',
+        'nome'            => 'produtos.nome',
+        'categoria_nome'  => 'categorias.nome',
+        default           => $key,
+    };
 }
 ```
 
-### Subquery
+### 11.2 Subquery com DB::raw()
 
 ```php
+use Illuminate\Support\Facades\DB;
+
 public function query(): Builder
 {
     return UserResponsavel::query()
@@ -427,75 +822,386 @@ public function query(): Builder
         ])
         ->leftJoin('users', 'users.id', '=', 'users_responsavel.user_id');
 }
-```
 
-### Scopes and pre-filtering
-
-```php
-public function query(): Builder
-{
-    return Produto::query()->where('ativo', true);
-}
-```
-
-This pre-filters every request — the user's table always shows only active products.
-
-### Custom sort logic
-
-```php
 public function columns(): array
 {
     return [
-        Column::make('total', 'number')
-            ->label('Total de Vendas')
-            ->sortable(false),  // disable sorting for computed columns
+        Column::make('nome', 'text')->label('Responsável'),
+        Column::make('total_atendimentos', 'number')
+            ->label('Total de Atendimentos')
+            ->sortable(false),      // subquery não pode ser ordenada
     ];
 }
 ```
 
-Set `->sortable(false)` for columns that don't map directly to a database column. The user won't be able to click the header to sort.
+### 11.3 Pré-filtro (scope fixo)
+
+Filtros aplicados em `query()` funcionam como **pré-filtros** — o usuário nunca vê dados fora desse escopo, independente dos filtros que aplicar:
+
+```php
+public function query(): Builder
+{
+    return Produto::query()
+        ->where('ativo', true)            // só produtos ativos
+        ->where('empresa_id', auth()->id()); // só da empresa do usuário logado
+}
+```
+
+### 11.4 Ordenação padrão
+
+Defina uma ordenação padrão no `query()`. Quando o usuário clicar em outro cabeçalho, o `ORDER BY` do controller é adicionado depois:
+
+```php
+public function query(): Builder
+{
+    return Produto::query()->orderBy('nome');
+}
+```
 
 ---
 
-## 9. TROUBLESHOOTING
+## 12. DETECÇÃO DE SCHEMA
+
+Quando você usa `--model=Produto`, o comando `make:rosium-table` lê o schema da tabela e detecta tipos automaticamente.
+
+### 12.1 Requisito
+
+A detecção de tipo usa `Schema::getColumnType()` que depende de `doctrine/dbal`:
+
+```bash
+composer require doctrine/dbal
+```
+
+Sem `doctrine/dbal`, a detecção retorna `'text'` para todas as colunas.
+
+### 12.2 Regras de detecção
+
+| Condição | Tipo detectado |
+|---|---|
+| Coluna é `id` | `number` (com label 'ID') |
+| Nome termina com `_id` | `select` |
+| Nome termina com `_at` | `date` |
+| Tipo DB: `bigint`, `integer`, `smallint`, `tinyint` | `number` |
+| Tipo DB: `decimal`, `float`, `double` | `number` |
+| Tipo DB: `boolean` | `boolean` |
+| Tipo DB: `date`, `datetime`, `datetimetz` | `date` |
+| Tipo DB: `time` | `text` |
+| Tipo DB: `json`, `text`, `guid`, `blob` | `text` |
+| Qualquer outro tipo | `text` |
+
+### 12.3 Colunas ignoradas
+
+Estas colunas são automaticamente puladas (não aparecem no `columns()` gerado):
+
+- `created_at`
+- `updated_at`
+- `deleted_at`
+- `password`
+- `remember_token`
+
+### 12.4 Máscara automática
+
+Se a coluna for do tipo `number` e o nome contiver uma destas palavras, uma máscara `R$ #,##0.00` é adicionada automaticamente:
+
+`preco`, `price`, `valor`, `value`, `custo`, `cost`, `total`, `saldo`, `balance`, `montante`, `amount`
+
+Exemplo: uma coluna chamada `preco_unitario` (contém "preco") recebe máscara de moeda.
+
+### 12.5 Label automática
+
+O nome da coluna é convertido: underscores → espaços, ucwords.
+
+- `criado_em` → label `Criado Em`
+- `preco_unitario` → label `Preco Unitario`
+
+---
+
+## 13. ARQUIVOS JS GERADOS
+
+### 13.1 Estrutura de saída
+
+Após rodar `make:rosium-table` ou `rosium:generate-js`:
+
+```
+resources/js/
+├── rosium/
+│   ├── produtos.js          # configuração da tabela "produtos"
+│   └── clientes.js          # configuração da tabela "clientes"
+└── rosium-init.js           # importa e inicializa todas as tabelas
+```
+
+### 13.2 Conteúdo do arquivo de tabela (`produtos.js`)
+
+```js
+import { LaravelAdapter } from '@rosiumdata/core'
+
+export function initProdutosTable() {
+  const el = document.querySelector('rosium-table[rosium="produtos"]')
+  if (!el) return
+
+  el.columns = [
+    { key: "id", type: "number", label: "ID", sortable: true, filterable: true, visible: true },
+    { key: "nome", type: "text", label: "Produto", sortable: true, filterable: true, visible: true }
+  ]
+  el.pageSize = 20
+  el.locale = 'pt-BR'
+  el.adapter = new LaravelAdapter('/rosium-data/produtos', {
+    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '' }
+  })
+}
+```
+
+### 13.3 Conteúdo do init (`rosium-init.js`)
+
+```js
+// Auto-generated by RosiumData. Do not edit manually.
+import '@rosiumdata/vanilla'
+import '@rosiumdata/vanilla/theme/default.css'
+import { initProdutosTable } from './rosium/produtos.js'
+import { initClientesTable } from './rosium/clientes.js'
+
+initProdutosTable()
+initClientesTable()
+```
+
+### 13.4 Import no app.js
+
+Basta um único import:
+
+```js
+// resources/js/app.js — NÃO precisa importar @rosiumdata/vanilla aqui
+import './rosium-init.js'
+```
+
+O `rosium-init.js` já contém os imports de `@rosiumdata/vanilla` e `@rosiumdata/vanilla/theme/default.css`.
+
+### 13.5 Geração condicional (write-if-changed)
+
+O JsGenerator só sobrescreve o arquivo se o conteúdo mudou. Isso evita disparar HMR do Vite a cada request em desenvolvimento.
+
+---
+
+## 14. TROUBLESHOOTING
 
 ### "rosium-table is not a known element"
 
-**Cause:** `@rosiumdata/vanilla` Web Component is not registered.
+**Causa:** o Web Component não foi registrado no navegador.
 
-**Fix:**
+**Solução:**
 ```js
+// Verifique se rosium-init.js está sendo importado:
 // resources/js/app.js
+import './rosium-init.js'
+
+// Ou registre manualmente:
 import '@rosiumdata/vanilla'
 ```
 
 ### "404 Not Found — rosium-data/produtos"
 
-**Cause:** Table class not discovered by the ServiceProvider.
+**Causa:** a classe da tabela não foi descoberta pelo ServiceProvider.
 
-**Fix:**
-1. Check the class is in `app/RosiumTables/`
-2. Check the class extends `Rosiumdata\Laravel\RosiumTable`
-3. Run `php artisan rosium:generate-js`
-4. Run `composer dump-autoload`
+**Solução (na ordem):**
+1. A classe está em `app/RosiumTables/`?
+2. A classe estende `Rosiumdata\Laravel\RosiumTable`?
+3. O método `name()` retorna exatamente `'produtos'`?
+4. Rode `composer dump-autoload`
+5. Rode `php artisan rosium:generate-js`
+6. Se criou a classe manualmente (sem artisan), limpe o cache: `php artisan config:clear`
 
 ### "500 Internal Server Error"
 
-**Cause:** SQL exception, invalid column name, or malformed filter.
+**Causa provável:** exceção SQL (coluna não existe, nome ambíguo em JOIN).
 
-**Fix:** Check Laravel logs (`storage/logs/laravel.log`). Common causes:
-- Column name in `columns()` doesn't exist in the database
-- Filter operator not supported
-- `between` with non-numeric values
+**Solução:**
+1. Verifique os logs em `storage/logs/laravel.log`
+2. Confirme que toda coluna em `columns()` existe na query
+3. Se usa JOIN, implemente `qualifyColumn()` para resolver ambiguidade
+4. Verifique se `filterable: false` está em colunas que não deveriam receber filtro
 
-### Filters not applying
+### Filtros não funcionam
 
-**Cause:** Column key in `columns()` doesn't match the database column.
+**Causa:** a key da `Column::make()` não bate com o nome da coluna no banco.
 
-**Fix:** `Column::make('nome', 'text')` uses `nome` as the key. The controller applies `where('nome', ...)`. Make sure the key matches the actual column name in the query.
+**Solução:** `Column::make('nome', 'text')` gera `WHERE nome LIKE ...`. O nome no banco precisa ser exatamente `nome`. Se a query usa alias, implemente `qualifyColumn()`.
 
-### "Function name must be a string" or JS SyntaxError
+### "Function name must be a string" no console JS
 
-**Cause:** `name()` contains characters that aren't valid JavaScript identifiers (e.g. `meus-produtos`).
+**Causa:** `name()` contém caracteres inválidos para identificador JavaScript (ex: hífen).
 
-**Fix:** Use underscores, not hyphens: `meus_produtos`, not `meus-produtos`.
+**Solução:** use apenas letras, números e underscore. `'meus_produtos'` ✅, `'meus-produtos'` ❌.
+
+### Colunas com máscara de moeda mas sem doctrine/dbal
+
+**Causa:** `Schema::getColumnType()` requer `doctrine/dbal` para detecção de tipos.
+
+**Solução:**
+```bash
+composer require doctrine/dbal
+```
+
+### JS não atualiza após mudar colunas
+
+**Causa:** o JS é gerado uma vez e cached. Mudanças em `columns()` precisam de regeneração.
+
+**Solução:**
+```bash
+php artisan rosium:generate-js
+```
+
+Em ambiente `local`, se `auto_generate_js` estiver `true` (default), a regeneração é automática.
+
+---
+
+## EXEMPLO COMPLETO (TUDO JUNTO)
+
+```php
+<?php
+
+namespace App\RosiumTables;
+
+use Rosiumdata\Laravel\RosiumTable;
+use Rosiumdata\Laravel\Column;
+use Rosiumdata\Laravel\ActionColumn;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
+use App\Models\Produto;
+
+class ProdutosTable extends RosiumTable
+{
+    public static function name(): string
+    {
+        return 'produtos';
+    }
+
+    public function query(): Builder
+    {
+        return Produto::query()
+            ->select([
+                'produtos.*',
+                'categorias.nome as categoria_nome',
+                DB::raw('(SELECT COUNT(*) FROM vendas WHERE vendas.produto_id = produtos.id) as total_vendas'),
+            ])
+            ->leftJoin('categorias', 'categorias.id', '=', 'produtos.categoria_id')
+            ->where('produtos.ativo', true);
+    }
+
+    public function columns(): array
+    {
+        return [
+            Column::make('id', 'number')->label('ID'),
+
+            Column::make('nome', 'text')
+                ->label('Produto')
+                ->sortable(),
+
+            Column::make('categoria_nome', 'text')
+                ->label('Categoria')
+                ->sortable(),
+
+            Column::make('preco', 'number')
+                ->label('Preço')
+                ->mask('R$ #,##0.00')
+                ->alignment('right'),
+
+            Column::make('estoque', 'number')
+                ->label('Estoque')
+                ->alignment('right'),
+
+            Column::make('total_vendas', 'number')
+                ->label('Total de Vendas')
+                ->sortable(false)
+                ->filterable(false),
+
+            Column::make('status', 'select')
+                ->label('Status')
+                ->options([
+                    1 => 'Ativo',
+                    2 => 'Inativo',
+                    3 => 'Pendente',
+                ]),
+
+            Column::make('criado_em', 'date')
+                ->label('Data de Criação'),
+
+            ActionColumn::make('acoes', [
+                ['key' => 'visualizar', 'label' => 'Visualizar'],
+                ['key' => 'editar', 'label' => 'Editar'],
+                ['key' => 'excluir', 'label' => 'Excluir', 'danger' => true],
+            ])->label('Ações'),
+        ];
+    }
+
+    public function defaultPageSize(): int
+    {
+        return 25;
+    }
+
+    public function maxPageSize(): int
+    {
+        return 500;
+    }
+
+    public function locale(): string
+    {
+        return 'pt-BR';
+    }
+
+    public function persistenceKey(): string
+    {
+        return 'produtos';
+    }
+
+    public function qualifyColumn(string $key): string
+    {
+        return match ($key) {
+            'id'              => 'produtos.id',
+            'nome'            => 'produtos.nome',
+            'categoria_nome'  => 'categorias.nome',
+            'preco'           => 'produtos.preco',
+            'estoque'         => 'produtos.estoque',
+            'status'          => 'produtos.status',
+            'criado_em'       => 'produtos.criado_em',
+            default           => $key,
+        };
+    }
+
+    public function eventHandlers(): ?string
+    {
+        return "el.addEventListener('action', ({ detail: { key, row } }) => {
+            if (key === 'visualizar') window.location.href = '/produtos/' + row.raw.id
+            if (key === 'editar') window.location.href = '/produtos/' + row.raw.id + '/editar'
+            if (key === 'excluir' && confirm('Excluir este produto?')) {
+                fetch('/api/produtos/' + row.raw.id, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name=\"csrf-token\"]').content,
+                        'Accept': 'application/json',
+                    }
+                }).then(() => el.refresh?.())
+            }
+        })";
+    }
+}
+```
+
+Blade:
+
+```blade
+@extends('layouts.app')
+
+@section('content')
+    <h1>Produtos</h1>
+    <rosium-table rosium="produtos" page-size="25" />
+@endsection
+```
+
+app.js:
+
+```js
+import './rosium-init.js'
+```
+
+---
+
+> **Documentos relacionados:** `INSTALLATION.md` (instalação passo a passo), `README.md` (visão geral).
