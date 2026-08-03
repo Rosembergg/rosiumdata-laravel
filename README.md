@@ -142,6 +142,12 @@ public function columns(): array
 }
 ```
 
+> ⚠️ **After any change to your table class (columns, labels, types, masks,
+> actions, page size, locale), regenerate the JavaScript:**
+> ```bash
+> php artisan rosium:generate-js
+> ```
+
 ### 3. Use in Blade
 
 ```blade

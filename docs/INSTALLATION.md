@@ -133,13 +133,17 @@ public function columns(): array
 }
 ```
 
-**If you added/changed columns, regenerate the JS:**
-
-```bash
-php artisan rosium:generate-js
-```
-
----
+> ⚠️ **Important:** After any change to your table class — adding/removing
+> columns, changing types, labels, masks, options, actions, page size, or
+> locale — you **must** regenerate the JavaScript file:
+>
+> ```bash
+> php artisan rosium:generate-js
+> ```
+>
+> The table class is PHP (runs on the server). The browser only understands
+> JavaScript. This command translates your PHP class into a JS file that the
+> browser can load. Without it, your changes won't appear in the table.
 
 ## Step 6: Use in Blade
 
