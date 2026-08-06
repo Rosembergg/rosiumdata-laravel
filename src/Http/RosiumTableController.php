@@ -5,6 +5,7 @@ namespace Rosiumdata\Laravel\Http;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Rosiumdata\Laravel\ActionColumn;
 use Rosiumdata\Laravel\RosiumTable;
 use Rosiumdata\Laravel\RosiumdataServiceProvider;
 
@@ -33,6 +34,8 @@ class RosiumTableController extends Controller
                 $colMap[$def['key']] = $def;
             }
 
+            $actionColumns = array_filter($columns, fn($col) => $col instanceof ActionColumn);
+
             $this->applyFilters($query, $request->input('filter', []), $instance, $validColumns, $colMap);
             $this->applySort($query, $request->input('sort'), $instance, $validColumns, $colMap);
 
@@ -45,8 +48,28 @@ class RosiumTableController extends Controller
 
             $paginator = $query->paginate(perPage: $perPage, page: $page);
 
+            $rows = array_map(function ($row) use ($instance, $actionColumns) {
+                $rules = $instance->actionRules($row);
+
+                $rowArray = $row instanceof \Illuminate\Database\Eloquent\Model
+                    ? $row->toArray()
+                    : (array) $row;
+
+                foreach ($actionColumns as $col) {
+                    $def = $col->toArray();
+                    $actions = $def['options']['actions'] ?? [];
+
+                    foreach ($actions as $action) {
+                        $key = $action['key'];
+                        $rowArray['can_' . $key] = $rules[$key] ?? true;
+                    }
+                }
+
+                return $rowArray;
+            }, $paginator->items());
+
             return response()->json([
-                'data' => $paginator->items(),
+                'data' => $rows,
                 'meta' => [
                     'current_page' => $paginator->currentPage(),
                     'per_page' => $paginator->perPage(),

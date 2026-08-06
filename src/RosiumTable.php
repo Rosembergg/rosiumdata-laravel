@@ -93,4 +93,26 @@ abstract class RosiumTable
     {
         return $key;
     }
+
+    /**
+     * Define per-row visibility of action buttons.
+     *
+     * Returns an associative array mapping action keys to booleans.
+     * Actions not listed in the returned array are always visible.
+     *
+     * Use Laravel Gates, Policies, or any business logic.
+     *
+     * Example:
+     *   return [
+     *       'editar' => $user->can('update', $row),
+     *       'excluir' => $user->can('delete', $row) && $row->status === 'pendente',
+     *   ];
+     *
+     * @param  mixed  $row  A single row from the query result (Model instance or stdClass)
+     * @return array<string, bool>
+     */
+    public function actionRules(mixed $row): array
+    {
+        return [];
+    }
 }

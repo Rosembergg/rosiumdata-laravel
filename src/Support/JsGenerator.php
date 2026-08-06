@@ -21,7 +21,18 @@ class JsGenerator
         /** @var RosiumTable $instance */
         $instance = new $tableClass;
 
-        $columns = array_map(fn ($col) => $col->toArray(), $instance->columns());
+        $columns = array_map(function ($col) {
+            $def = $col->toArray();
+
+            if ($col instanceof ActionColumn && isset($def['options']['actions'])) {
+                $def['options']['actions'] = array_map(function ($action) {
+                    $action['visible'] = "(row) => row.raw.can_{$action['key']}";
+                    return $action;
+                }, $def['options']['actions']);
+            }
+
+            return $def;
+        }, $instance->columns());
         $columnsJson = json_encode(
             $columns,
             JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES

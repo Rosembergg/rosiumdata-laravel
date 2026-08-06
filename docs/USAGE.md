@@ -393,6 +393,11 @@ public static function make(string $key, array $actions): self
 ]
 ```
 
+> ⚠️ **Action keys must be valid JavaScript identifiers** (`[a-zA-Z_][a-zA-Z0-9_]*`).
+> Use underscores (`minha_acao`), not hyphens (`minha-acao`). This is required for
+> `row.raw.can_{key}` property access and for the `event.detail.key` emitted by
+> the Web Component.
+
 ### 4.3 label()
 
 ```php
@@ -419,6 +424,59 @@ ActionColumn::make('acoes', [
     ['key' => 'excluir',    'label' => 'Excluir', 'danger' => true],
 ])->label('Ações')
 ```
+
+### 4.6 Conditional visibility (actionRules)
+
+Define per-row visibility of actions using Laravel Gates, Policies, or any business logic. Actions not listed in the returned array are always visible.
+
+Override `actionRules()` in your table class:
+
+```php
+use App\Models\NaoConformidade;
+
+public function actionRules(mixed $row): array
+{
+    $user = auth()->user();
+
+    return [
+        'editar' => $user->can('update', $row),
+        'excluir' => $user->can('delete', $row) && $row->status === 'pendente',
+        // 'visualizar' not listed — always visible
+    ];
+}
+```
+
+**How it works:**
+
+1. You return `['action_key' => true/false]` from `actionRules($row)`
+2. The controller calls this method for every row and injects `can_{key}` fields into the JSON response (e.g. `can_editar: true`)
+3. The JsGenerator automatically adds a `visible` callback to each action in the generated JS:
+
+```js
+{
+    "key": "editar",
+    "label": "Editar",
+    "visible": "(row) => row.raw.can_editar"
+}
+```
+
+4. The Web Component evaluates the callback per row — hiding or showing the button
+
+**What you can do inside `actionRules()`:**
+
+| Approach | Example |
+|---|---|
+| Laravel Policies | `$user->can('update', $row)` |
+| Laravel Gates | `Gate::allows('edit-post', $row)` |
+| Direct permission check | `$user->can('posts.edit')` |
+| Business logic | `$row->status === 'pendente'` |
+| Mixed | `$user->can('update', $row) && $row->user_id === $user->id` |
+
+**Defaults and safety:**
+
+- If `actionRules()` is not overridden (returns `[]`) → **all actions are always visible** (backwards compatible)
+- If an action key is not in the returned array → **visible by default** (`true`)
+- The method is called once per row — keep it lightweight (no N+1 queries)
 
 ---
 

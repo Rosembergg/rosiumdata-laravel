@@ -25,4 +25,12 @@ class {{ className }} extends RosiumTable
 {{ columns }}
         ];
     }
+
+    // public function actionRules(mixed $row): array
+    // {
+    //     return [
+    //         'editar' => auth()->user()->can('update', $row),
+    //         'excluir' => auth()->user()->can('delete', $row),
+    //     ];
+    // }
 }

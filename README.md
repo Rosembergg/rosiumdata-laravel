@@ -209,6 +209,9 @@ Every table gets a `GET /rosium-data/{table}` endpoint automatically. Filters, s
 ### 🚨 Error-safe
 Invalid filters (column that doesn't exist, malformed value) are silently ignored instead of throwing SQL exceptions. The controller wraps everything in try/catch.
 
+### 🔐 Row-level permissions
+Define `actionRules($row)` — hide or show action buttons per row. Use Laravel Policies, Gates, or any business logic. Same API as PowerGrid.
+
 ### 🎨 Same theme as Nuxt
 The Web Component uses the same CSS variables (`--rosium-*`) and classes (`.rosium-*`) as the Nuxt renderer. Same visual identity everywhere.
 
@@ -283,6 +286,7 @@ return [
 |---|---|
 | [USAGE.md](docs/USAGE.md) | Complete API reference — `RosiumTable`, `Column`, `ActionColumn`, controller |
 | [INSTALLATION.md](docs/INSTALLATION.md) | Step-by-step setup, requirements, troubleshooting |
+| [PRESENTATION.md](docs/PRESENTATION.md) | **How it works** — simple explanation, no jargon |
 
 ---
 
